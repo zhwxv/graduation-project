@@ -9,6 +9,7 @@ from torch.optim.lr_scheduler import _LRScheduler
 from sklearn.metrics import auc, mean_squared_error, precision_recall_curve, roc_auc_score,accuracy_score,f1_score
 from data import MoleDataSet, MoleData, scaffold_split,scaffold_split_balanced
 from model import FPGNN
+import matplotlib.pyplot as plt
 
 def mkdir(path,isdir = True):
     if isdir == False:
@@ -268,3 +269,35 @@ class NoamLR(_LRScheduler):
                 self.lr[i] = self.final_lr[i]
 
             self.optimizer.param_groups[i]['lr'] = self.lr[i]
+
+
+
+def save_training_curves(train_losses, val_losses, val_scores, metric_name, save_path):
+    """保存训练过程中的 Loss 和 Metric 曲线"""
+    epochs = range(len(train_losses))
+    
+    # 清除之前的图像状态
+    plt.clf()
+    
+    # 子图1: Loss 曲线
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, label='Train Loss')
+    plt.plot(epochs, val_losses, label='Val Loss')
+    plt.title('Loss Curve')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    # 子图2: 评价指标曲线 (如 AUC)
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, val_scores, label=f'Val {metric_name}', color='orange')
+    plt.title(f'{metric_name.upper()} Curve')
+    plt.xlabel('Epochs')
+    plt.ylabel(metric_name)
+    plt.legend()
+    
+    plt.tight_layout()
+    # 图片保存到模型保存目录
+    plot_file = os.path.join(save_path, 'training_curves.png')
+    plt.savefig(plot_file)
+    plt.clf()

@@ -106,7 +106,9 @@ class GEGNN(nn.Module):
             outs.append(h.mean(dim=0))
         return torch.stack(outs)
 
-# --- 5. GAT 多模态融合模块 ---
+
+    
+# --- 5. GAT 多模态融合模块 (优化版) ---
 class GATFusion(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -121,9 +123,14 @@ class GATFusion(nn.Module):
         h = self.W(features)
         h_i = h.repeat_interleave(num_m, dim=1)
         h_j = h.repeat(1, num_m, 1)
+        
+        # 计算注意力权重
         e = self.leakyrelu(torch.matmul(torch.cat([h_i, h_j], dim=-1), self.a).view(batch_size, num_m, num_m))
         alpha = F.softmax(e, dim=-1)
-        return torch.matmul(alpha, h).sum(dim=1) # 改为 sum 增强表达能力
+        
+        # 【修改关键点】由 sum 改为 mean，防止多模态特征叠加导致数值爆炸
+        # 这样可以将特征维持在相同的量级，有助于 Loss 的下降
+        return torch.matmul(alpha, h).mean(dim=1)
 
 # --- 6. 总体整合模型 ---
 class FpgnnModel(nn.Module):

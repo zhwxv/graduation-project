@@ -1,4 +1,4 @@
-# train.py 完整修复版
+# train.py 完整修改版
 from argparse import Namespace
 from logging import Logger
 import os
@@ -8,7 +8,8 @@ import torch
 from torch.optim import Adam
 from torch.optim.lr_scheduler import LambdaLR, ExponentialLR
 
-from tool import mkdir, get_task_name, load_data, split_data, get_label_scaler, get_loss, get_metric, save_model, NoamLR, load_model
+# 从 tool 导入新增的绘图工具 save_training_curves
+from tool import mkdir, get_task_name, load_data, split_data, get_label_scaler, get_loss, get_metric, save_model, NoamLR, load_model, save_training_curves
 from model import FPGNN
 from data import MoleDataSet
 
@@ -19,6 +20,7 @@ def epoch_train(model, data, loss_f, optimizer, scheduler, args):
     data.random_data(args.seed) 
     loss_sum = 0
     iter_step = args.batch_size
+    num_iters = 0 # 记录实际运行的 batch 数量
     
     for i in range(0, len(data), iter_step):
         if i + iter_step > len(data): break
@@ -34,18 +36,21 @@ def epoch_train(model, data, loss_f, optimizer, scheduler, args):
         pred = model(args, batch_features)
         loss = (loss_f(pred, target) * mask).sum() / mask.sum()
         loss_sum += loss.item()
+        num_iters += 1
         
         loss.backward()
         optimizer.step()
         if isinstance(scheduler, NoamLR): scheduler.step()
             
     if isinstance(scheduler, ExponentialLR): scheduler.step()
-    return loss_sum
+    # 返回平均 Loss
+    return loss_sum / num_iters if num_iters > 0 else 0
 
 def evaluate(model, data, loss_f, args):
     model.eval()
     loss_sum = 0
     iter_step = args.batch_size
+    num_iters = 0
     
     with torch.no_grad():
         for i in range(0, len(data), iter_step):
@@ -60,8 +65,10 @@ def evaluate(model, data, loss_f, args):
             pred = model(args, batch_features)
             loss = (loss_f(pred, target) * mask).sum() / mask.sum()
             loss_sum += loss.item()
+            num_iters += 1
             
-    return loss_sum
+    # 返回平均 Loss
+    return loss_sum / num_iters if num_iters > 0 else 0
 
 def predict(model, data, batch_size, scaler, args):
     model.eval()
@@ -124,8 +131,6 @@ def fold_train(args, log):
     
     # 2. 划分数据集
     train_data, val_data, test_data = split_data(data, args.split_type, args.split_ratio, args.seed, log)
-    
-    # 【修复关键点】给 args 赋值训练集大小，供 NoamLR 使用
     args.train_data_size = len(train_data)
     
     debug(f'Train size: {args.train_data_size}  Val size: {len(val_data)}  Test size: {len(test_data)}')
@@ -137,10 +142,12 @@ def fold_train(args, log):
     model = FPGNN(args).to(device) if args.cuda else FPGNN(args)
     optimizer = Adam(model.parameters(), lr=args.init_lr, weight_decay=args.weight_decay)
     
-    # 初始化调度器，现在 args.train_data_size 已经存在了
     scheduler = NoamLR(optimizer, [args.warmup_epochs], [args.epochs], 
                        args.train_data_size // args.batch_size, 
                        [args.init_lr], [args.max_lr], [args.final_lr])
+
+    # 用于可视化的数据记录
+    train_losses, val_losses, val_scores = [], [], []
 
     best_score = -float('inf') if args.dataset_type == 'classification' else float('inf')
     best_epoch = 0
@@ -154,6 +161,11 @@ def fold_train(args, log):
         val_score = compute_score(val_pred, val_data.label(), metric_f, args, log)
         ave_val_score = np.nanmean(val_score)
 
+        # 记录数据用于绘图
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+        val_scores.append(ave_val_score)
+
         info(f'Validation {args.metric} = {ave_val_score:.6f} | loss = {val_loss:.6f}')
 
         if (args.dataset_type == 'classification' and ave_val_score > best_score) or \
@@ -161,6 +173,9 @@ def fold_train(args, log):
             best_score, best_epoch = ave_val_score, epoch
             save_model(os.path.join(args.save_path, 'model.pt'), model, label_scaler, args)
 
+    # 训练结束，绘制并保存 Loss 和 Metric 曲线
+    save_training_curves(train_losses, val_losses, val_scores, args.metric, args.save_path)
+    
     info(f'Best Validation {args.metric} = {best_score:.6f} at Epoch {best_epoch}')
     
     # 测试评估

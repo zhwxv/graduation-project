@@ -36,11 +36,11 @@ def add_train_argument(p):
     p.add_argument('--fp_dim', type=int, default=1024,
                     help='The initial dimension of the Morgan fingerprint ECFP in fpn.')
     #******************************超参数设置**************************
-    p.add_argument('--dropout_egnn', type=float, default=0.4,
+    p.add_argument('--dropout_egnn', type=float, default=0.5,
                    help='The dropout of egnn.')
-    p.add_argument('--dropout_fpn',type=float,default=0.3,
+    p.add_argument('--dropout_fpn',type=float,default=0.5,
                    help='The dropout of fpn and ffn.')
-    p.add_argument('--dropout_gnn',type=float,default=0.45,
+    p.add_argument('--dropout_gnn',type=float,default=0.5,
                    help='The dropout of gnn.')
     p.add_argument('--emb_egnn', type=int, default=64,
                    help='embedding dimensions of egnn (default: 300)')
@@ -110,9 +110,9 @@ def set_train_argument():
 
     args.cuda = torch.cuda.is_available()
     args.init_lr = 1e-4
-    args.max_lr = 1e-3
+    args.max_lr = 3e-4
     args.final_lr = 1e-4
-    args.warmup_epochs = 2.0
+    args.warmup_epochs = 5.0
     args.num_lrs = 1
     
     return args
