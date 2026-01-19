@@ -1,18 +1,17 @@
 # 忽略 Python 运行缓存
 __pycache__/
-*.pyc
 
 # 忽略深度学习模型权重文件
-*.pt
-*.pth
 model_save/
 
 # 忽略日志文件
 log/
-*.log
 
 # 忽略训练结果
 result/
 
+# 忽略其他文件夹
+others/
+
 # 忽略数据集
-data/*.csv
+data/
