@@ -1,4 +1,4 @@
-# train.py 完整修改版
+# train.py 完整修改版 (集成早停机制)
 from argparse import Namespace
 from logging import Logger
 import os
@@ -8,7 +8,7 @@ import torch
 from torch.optim import Adam
 from torch.optim.lr_scheduler import LambdaLR, ExponentialLR
 
-# 从 tool 导入新增的绘图工具 save_training_curves
+# 从 tool 导入绘图工具和相关辅助函数
 from tool import mkdir, get_task_name, load_data, split_data, get_label_scaler, get_loss, get_metric, save_model, NoamLR, load_model, save_training_curves
 from model import FPGNN
 from data import MoleDataSet
@@ -118,6 +118,7 @@ def compute_score(pred, label, metric_f, args, log):
         result.append(re)
     return result
 
+
 def fold_train(args, log):
     info, debug = log.info, log.debug
     args.task_names = get_task_name(args.data_path)
@@ -151,7 +152,8 @@ def fold_train(args, log):
 
     best_score = -float('inf') if args.dataset_type == 'classification' else float('inf')
     best_epoch = 0
-    
+    patience_counter = 0 
+
     for epoch in range(args.epochs):
         info(f'Epoch {epoch}')
         train_loss = epoch_train(model, train_data, loss_f, optimizer, scheduler, args)
@@ -161,19 +163,32 @@ def fold_train(args, log):
         val_score = compute_score(val_pred, val_data.label(), metric_f, args, log)
         ave_val_score = np.nanmean(val_score)
 
-        # 记录数据用于绘图
+        # 记录数据
         train_losses.append(train_loss)
         val_losses.append(val_loss)
         val_scores.append(ave_val_score)
 
+        # 【修改点 1】将绘图函数移至循环内部
+        # 这样每跑完一个 Epoch，图片就会被覆盖更新，你可以实时通过查看图片观察收敛情况
+        save_training_curves(train_losses, val_losses, val_scores, args.metric, args.save_path)
+
         info(f'Validation {args.metric} = {ave_val_score:.6f} | loss = {val_loss:.6f}')
 
+        # 检查是否有性能提升
         if (args.dataset_type == 'classification' and ave_val_score > best_score) or \
            (args.dataset_type == 'regression' and ave_val_score < best_score):
             best_score, best_epoch = ave_val_score, epoch
             save_model(os.path.join(args.save_path, 'model.pt'), model, label_scaler, args)
+            patience_counter = 0  
+        else:
+            patience_counter += 1  
 
-    # 训练结束，绘制并保存 Loss 和 Metric 曲线
+        # 触发早停判断
+        if hasattr(args, 'patience') and patience_counter >= args.patience:
+            info(f'Early stopping at epoch {epoch}. No improvement for {args.patience} epochs.')
+            break
+
+    # 【可选】此处保留一次最终绘图，确保最后的数据被完整记录
     save_training_curves(train_losses, val_losses, val_scores, args.metric, args.save_path)
     
     info(f'Best Validation {args.metric} = {best_score:.6f} at Epoch {best_epoch}')

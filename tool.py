@@ -300,4 +300,4 @@ def save_training_curves(train_losses, val_losses, val_scores, metric_name, save
     # 图片保存到模型保存目录
     plot_file = os.path.join(save_path, 'training_curves.png')
     plt.savefig(plot_file)
-    plt.clf()
+    plt.close() # 【新增】显式关闭画布，释放内存并确保文件写入

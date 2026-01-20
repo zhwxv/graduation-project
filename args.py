@@ -56,7 +56,7 @@ def add_train_argument(p):
                     help='The Features dimension after all features are fusion,'
                              'It is also the final output dimension of each model.')
     p.add_argument('--weight_decay', type=float, default=0.1, help='ablation_weight decay .')
-    p.add_argument('--patience', type=int, default=15, 
+    p.add_argument('--patience', type=int, default=10, 
                    help='Number of epochs to wait for improvement before early stopping.')
     #******************************超参数设置**************************
     p.add_argument('--dataset', type=str, default='drug_small', help='root directory of dataset.')
